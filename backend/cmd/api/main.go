@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/faiface/beep"
@@ -27,10 +30,50 @@ func main() {
 
 	resampled := beep.Resample(4, format.SampleRate, sr, streamer)
 
+	//loop := beep.Loop(3, streamer)
+	//fast := beep.ResampleRatio(4, 5, loop)
+	ctrl := beep.Ctrl{Streamer: resampled, Paused: false}
+
 	done := make(chan bool)
-	speaker.Play(beep.Seq(resampled, beep.Callback(func() {
+	speaker.Play(beep.Seq(&ctrl, beep.Callback(func() {
 		done <- true
 	})))
 
-	<-done
+	input := make(chan string)
+	go func() {
+		r := bufio.NewReader(os.Stdin)
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				log.Fatal(err)
+			}
+			input <- strings.ToLower(strings.TrimSpace(line))
+		}
+	}()
+
+	fmt.Println("Press [ENTER] to pause/resume. ")
+	var playbackPosition time.Duration
+	for {
+		select {
+		case <-done:
+			return
+		case <-time.After(time.Second):
+			speaker.Lock()
+			timeCheck := format.SampleRate.D(streamer.Position()).Round(time.Second)
+			if timeCheck > playbackPosition {
+				playbackPosition = timeCheck
+				fmt.Println(playbackPosition)
+			}
+			speaker.Unlock()
+		case s := <-input:
+			switch s {
+			case "":
+				speaker.Lock()
+				ctrl.Paused = !ctrl.Paused
+				speaker.Unlock()
+			case "q":
+				return
+			}
+		}
+	}
 }
