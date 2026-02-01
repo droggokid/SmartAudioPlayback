@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gopxl/beep/v2"
-	"github.com/gopxl/beep/v2/effects"
 	"github.com/gopxl/beep/v2/mp3"
 	"github.com/gopxl/beep/v2/speaker"
 )
@@ -35,20 +34,17 @@ func RunPlayer() {
 
 	//loop := beep.Loop(3, streamer)
 	ctrl := &beep.Ctrl{Streamer: resampled, Paused: false}
-	volume := &effects.Volume{
-		Streamer: ctrl,
-		Base:     2,
-		Volume:   0,
-		Silent:   false,
-	}
+	volume := NewVolume(ctrl, 2, 0)
 
-	speedy, err := SetSpeed(volume, 2)
+	boost := NewVolumeBoost()
+
+	speedy, err := NewSpeed(volume, 1)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	done := make(chan bool)
-	speaker.Play(beep.Seq(speedy.streamer, beep.Callback(func() {
+	speaker.Play(beep.Seq(speedy.resampler, beep.Callback(func() {
 		done <- true
 	})))
 
@@ -64,8 +60,7 @@ func RunPlayer() {
 		}
 	}()
 
-	interval := time.Duration(float64(time.Second) / speedy.ratio)
-	ticker := time.NewTicker(interval)
+	ticker := makeNewTicker(speedy.ratio)
 	defer ticker.Stop()
 
 	fmt.Println("Press [ENTER] to pause/resume. ")
@@ -80,17 +75,67 @@ func RunPlayer() {
 			if timeCheck > playbackPosition {
 				playbackPosition = timeCheck
 				fmt.Println(playbackPosition)
-
 			}
 			speaker.Unlock()
+		case newRatio := <-speedy.ratioChanged:
+			ticker = recreateTicker(ticker, newRatio)
 		case s := <-input:
 			switch s {
 			case "":
 				speaker.Lock()
 				ctrl.Paused = !ctrl.Paused
 				speaker.Unlock()
+			case "0":
+				speaker.Lock()
+				err = speedy.ChangeRatio(0.5)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "1":
+				speaker.Lock()
+				err = speedy.ChangeRatio(1)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "2":
+				speaker.Lock()
+				err = speedy.ChangeRatio(2)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "3":
+				speaker.Lock()
+				err = speedy.ChangeRatio(3)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "4":
+				speaker.Lock()
+				err = speedy.ChangeRatio(4)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
 			case "q":
 				return
+			case "d":
+				speaker.Lock()
+				err = boost.Toggle(volume)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "m":
+				speaker.Lock()
+				err = toggleMute(volume)
+				speaker.Unlock()
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 	}

@@ -8,12 +8,13 @@ import (
 )
 
 type Speed struct {
-	streamer *beep.Resampler
-	ratio    float64
+	resampler    *beep.Resampler
+	ratio        float64
+	ratioChanged chan float64
 }
 
-// SetSpeed Ratio must be at least one
-func SetSpeed(input *effects.Volume, ratio float64) (*Speed, error) {
+// NewSpeed Ratio must be at least one
+func NewSpeed(input *effects.Volume, ratio float64) (*Speed, error) {
 	if input == nil {
 		return nil, fmt.Errorf("input cannot be nil")
 	}
@@ -23,5 +24,21 @@ func SetSpeed(input *effects.Volume, ratio float64) (*Speed, error) {
 	}
 
 	r := beep.ResampleRatio(4, ratio, input)
-	return &Speed{streamer: r, ratio: ratio}, nil
+	return &Speed{resampler: r, ratio: ratio, ratioChanged: make(chan float64, 1)}, nil
+}
+
+// ChangeRatio between 0.5 and 4, should be called under speaker.Lock()
+func (s *Speed) ChangeRatio(r float64) error {
+	if r < 0.5 || r > 4 {
+		return fmt.Errorf("invalid ratio: %f", r)
+	}
+
+	s.ratio = r
+	s.resampler.SetRatio(r)
+
+	select {
+	case s.ratioChanged <- r:
+	default:
+	}
+	return nil
 }
